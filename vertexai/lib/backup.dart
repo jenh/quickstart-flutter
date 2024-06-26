@@ -19,16 +19,8 @@ import 'package:firebase_vertexai/firebase_vertexai.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-    print('Firebase initialized successfully');
-  } catch (e) {
-    print('Error initializing Firebase: $e');
-  }
+
+void main() {
   runApp(const GenerativeAISample());
 }
 
@@ -82,9 +74,9 @@ class ChatWidget extends StatefulWidget {
 }
 
 class _ChatWidgetState extends State<ChatWidget> {
-  GenerativeModel? _model;
-  GenerativeModel? _functionCallModel;
-  ChatSession? _chat;
+  late final GenerativeModel _model;
+  late final GenerativeModel _functionCallModel;
+  late final ChatSession _chat;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
   final FocusNode _textFieldFocus = FocusNode();
@@ -95,18 +87,35 @@ class _ChatWidgetState extends State<ChatWidget> {
   @override
   void initState() {
     super.initState();
-    _initializeFirebaseAndModels();
+
+    initFirebase().then((value) {
+      _model = FirebaseVertexAI.instance.generativeModel(
+        model: 'gemini-1.5-flash',
+      );
+      _functionCallModel = FirebaseVertexAI.instance.generativeModel(
+        model: 'gemini-1.5-flash',
+        tools: [
+          Tool(functionDeclarations: [
+            FunctionDeclaration(
+                'fetchCurrentWeather',
+                'Returns the weather in a given location.',
+                Schema(SchemaType.object, properties: {
+                  'location': Schema(SchemaType.string,
+                      description: 'A location name, like "London".'),
+                }, requiredProperties: [
+                  'location'
+                ]))
+          ])
+        ],
+      );
+      _chat = _model.startChat();
+    });
   }
 
-  Future<void> _initializeFirebaseAndModels() async {
-    // Initialize Firebase (done in main, but can add error handling here)
-
-    setState(() {
-      _model = FirebaseVertexAI.instance.generativeModel(
-        model: 'gemini-1.5-flash-preview-0514', // Replace with your model
-      );
-      _chat = _model?.startChat(); // Use ?. to handle potential null _model
-    });
+  Future<void> initFirebase() async {
+    await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+    );
   }
 
   void _scrollDown() {
@@ -261,8 +270,8 @@ class _ChatWidgetState extends State<ChatWidget> {
       ];
       _generatedContent.add((image: null, text: message, fromUser: true));
 
-      var response = await _model?.generateContent(content);
-      var text = response?.text;
+      var response = await _model.generateContent(content);
+      var text = response.text;
       _generatedContent.add((image: null, text: text, fromUser: false));
 
       if (text == null) {
@@ -318,8 +327,8 @@ class _ChatWidgetState extends State<ChatWidget> {
         ),
       );
 
-      var response = await _model?.generateContent(content);
-      var text = response?.text;
+      var response = await _model.generateContent(content);
+      var text = response.text;
       _generatedContent.add((image: null, text: text, fromUser: false));
 
       if (text == null) {
@@ -352,10 +361,10 @@ class _ChatWidgetState extends State<ChatWidget> {
 
     try {
       _generatedContent.add((image: null, text: message, fromUser: true));
-      var response = await _chat?.sendMessage(
+      var response = await _chat.sendMessage(
         Content.text(message),
       );
-      var text = response?.text;
+      var text = response.text;
       _generatedContent.add((image: null, text: text, fromUser: false));
 
       if (text == null) {
@@ -387,9 +396,9 @@ class _ChatWidgetState extends State<ChatWidget> {
     });
 
     const prompt = 'tell a short story';
-    var response = await _model?.countTokens([Content.text(prompt)]);
+    var response = await _model.countTokens([Content.text(prompt)]);
     print(
-      'token: ${response?.totalTokens}, billable characters: ${response?.totalBillableCharacters}',
+      'token: ${response.totalTokens}, billable characters: ${response.totalBillableCharacters}',
     );
 
     setState(() {
