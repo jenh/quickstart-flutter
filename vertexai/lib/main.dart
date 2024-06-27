@@ -17,6 +17,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:firebase_vertexai/firebase_vertexai.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_remote_config/firebase_remote_config.dart';
+import 'firebase_options.dart';
 
 void main() {
   runApp(const GenerativeAISample());
@@ -75,6 +77,8 @@ class _ChatWidgetState extends State<ChatWidget> {
   late final GenerativeModel _model;
   late final GenerativeModel _functionCallModel;
   late final ChatSession _chat;
+  late final String _modelName;
+  late final String _promptText;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _textController = TextEditingController();
   final FocusNode _textFieldFocus = FocusNode();
@@ -86,12 +90,34 @@ class _ChatWidgetState extends State<ChatWidget> {
   void initState() {
     super.initState();
 
-    initFirebase().then((value) {
+    initFirebase().then((value) async {
+      final remoteConfig = FirebaseRemoteConfig.instance;
+      await remoteConfig.setConfigSettings(RemoteConfigSettings(
+        fetchTimeout: const Duration(seconds: 1),
+        minimumFetchInterval: const Duration(seconds: 1),
+      ));
+
+      remoteConfig.setDefaults(const {
+        "model_name": "gemini-1.5-flash",
+        "prompt": "Default prompt",
+      });
+
+      // Fetch and activate Remote Config.
+      remoteConfig.fetchAndActivate();
+
+      // Assign Remote Config values.
+      _modelName = remoteConfig.getString("model_name");
+      _promptText = remoteConfig.getString("prompt");
+
+      // Check the values.
+      print("model name is ${_modelName} and prompt is ${_promptText}.");
+
+
       _model = FirebaseVertexAI.instance.generativeModel(
-        model: 'gemini-1.5-flash-preview-0514',
+        model: _modelName,
       );
       _functionCallModel = FirebaseVertexAI.instance.generativeModel(
-        model: 'gemini-1.5-flash-preview-0514',
+        model: _modelName,
         tools: [
           Tool(functionDeclarations: [
             FunctionDeclaration(
@@ -111,7 +137,9 @@ class _ChatWidgetState extends State<ChatWidget> {
   }
 
   Future<void> initFirebase() async {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+    );
   }
 
   void _scrollDown() {
@@ -358,7 +386,7 @@ class _ChatWidgetState extends State<ChatWidget> {
     try {
       _generatedContent.add((image: null, text: message, fromUser: true));
       var response = await _chat.sendMessage(
-        Content.text(message),
+        Content.text("${_promptText}  ${message}"),
       );
       var text = response.text;
       _generatedContent.add((image: null, text: text, fromUser: false));
